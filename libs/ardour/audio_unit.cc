@@ -1323,7 +1323,7 @@ AUPlugin::can_support_io_configuration (const ChanCount& in, ChanCount& out, Cha
 #endif
 
 	// preferred setting (provided by plugin_insert)
-	const int preferred_out = out.n_audio ();
+	const int32_t preferred_out = out.n_audio ();
 	bool found = false;
 	bool exact_match = false;
 
@@ -1374,7 +1374,7 @@ AUPlugin::can_support_io_configuration (const ChanCount& in, ChanCount& out, Cha
 	/* now allow potentially "imprecise" matches */
 	int32_t audio_out = -1;
 	float penalty = 9999;
-	int used_possible_in = 0;
+	int32_t used_possible_in = 0;
 #if defined (__clang__)
 #	pragma clang diagnostic push
 #	pragma clang diagnostic ignored "-Wtautological-compare"
@@ -1398,7 +1398,7 @@ AUPlugin::can_support_io_configuration (const ChanCount& in, ChanCount& out, Cha
   _output_configs.insert (0);
 
 #define UPTO(nch) {                                \
-  for (int n = 1; n <= nch; ++n) {                 \
+  for (int32_t n = 1; n <= nch; ++n) {             \
     _output_configs.insert (n);                    \
   }                                                \
 }
