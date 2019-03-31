@@ -401,6 +401,22 @@ LV2Plugin::LV2Plugin (const LV2Plugin& other)
 	latency_compute_run();
 }
 
+static bool
+feature_is_supported(const LV2_Feature*const* features, const char* uri)
+{
+	if (!strcmp(uri, "http://lv2plug.in/ns/lv2core#isLive")) {
+		return true;
+	}
+
+	for (const LV2_Feature*const* f = features; *f; ++f) {
+		if (!strcmp(uri, (*f)->URI)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void
 LV2Plugin::init(const void* c_plugin, samplecnt_t rate)
 {
@@ -573,9 +589,26 @@ LV2Plugin::init(const void* c_plugin, samplecnt_t rate)
 		_state_worker = new Worker(this, ring_size, false);
 	}
 
+	_impl->name   = lilv_plugin_get_name(plugin);
+	_impl->author = lilv_plugin_get_author_name(plugin);
+
+	LilvNodes* required_features = lilv_plugin_get_required_features(plugin);
+	LILV_FOREACH(nodes, f, required_features) {
+		const LilvNode* feature = lilv_nodes_get(required_features, f);
+		const char*     uri     = lilv_node_as_uri(feature);
+		if (!feature_is_supported(_features, uri)) {
+			error << string_compose(
+				_("LV2: \"%1\" requires unsupported feature <%2>"),
+				lilv_node_as_string(_impl->name),
+				uri) << endmsg;
+			lilv_node_free(_impl->author);
+			lilv_node_free(_impl->name);
+			lilv_nodes_free(required_features);
+			throw failed_constructor();
+		}
+	}
+
 	_impl->instance = lilv_plugin_instantiate(plugin, rate, _features);
-	_impl->name     = lilv_plugin_get_name(plugin);
-	_impl->author   = lilv_plugin_get_author_name(plugin);
 
 	if (_impl->instance == 0) {
 		error << _("LV2: Failed to instantiate plugin ") << uri() << endmsg;
@@ -623,22 +656,6 @@ LV2Plugin::init(const void* c_plugin, samplecnt_t rate)
 		lilv_node_free(_impl->author);
 		throw failed_constructor();
 	}
-
-#ifdef HAVE_LV2_1_2_0
-	LilvNodes *required_features = lilv_plugin_get_required_features (plugin);
-	if (lilv_nodes_contains (required_features, _world.bufz_powerOf2BlockLength) ||
-			lilv_nodes_contains (required_features, _world.bufz_fixedBlockLength)
-	   ) {
-		error << string_compose(
-		    _("LV2: \"%1\" buffer-size requirements cannot be satisfied."),
-		    lilv_node_as_string(_impl->name)) << endmsg;
-		lilv_node_free(_impl->name);
-		lilv_node_free(_impl->author);
-		lilv_nodes_free(required_features);
-		throw failed_constructor();
-	}
-	lilv_nodes_free(required_features);
-#endif
 
 	LilvNodes* optional_features = lilv_plugin_get_optional_features (plugin);
 #ifdef HAVE_LV2_1_2_0
@@ -3483,21 +3500,6 @@ LV2PluginInfo::discover()
 			lilv_node_free(name);
 			continue;
 		}
-
-#ifdef HAVE_LV2_1_2_0
-		LilvNodes *required_features = lilv_plugin_get_required_features (p);
-		if (lilv_nodes_contains (required_features, world.bufz_powerOf2BlockLength) ||
-				lilv_nodes_contains (required_features, world.bufz_fixedBlockLength)
-		   ) {
-			warning << string_compose(
-			    _("Ignoring LV2 plugin \"%1\" because its buffer-size requirements cannot be satisfied."),
-			    lilv_node_as_string(name)) << endmsg;
-			lilv_nodes_free(required_features);
-			lilv_node_free(name);
-			continue;
-		}
-		lilv_nodes_free(required_features);
-#endif
 
 		info->type = LV2;
 
